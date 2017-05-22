@@ -1,0 +1,20 @@
+
+	while(c < len(service_dept)):
+		#msgprint("%s"%service_dept[c:c+1].upper())
+		#c=c+1
+		if c != len(service_dept):
+			if check_sequence(alpha):
+				alpha = service_dept[c:(c+1)].upper()
+				#msgprint("c = %s A = %s"%(c,alpha))
+				c=c+1
+			else:
+				break
+		else:
+			msgprint("No MAtch")
+			alpha = "1"
+
+	if alpha != "1":
+		return alpha+"001"
+	else:
+		throw("Error")
+		

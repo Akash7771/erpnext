@@ -1,0 +1,97 @@
+frappe.ui.form.on("Maintenance Log", {
+	refresh:function(frm){
+		cur_frm.set_intro("Maintenance Log is use to create the" +
+		" Maintenance for Fixed Assets. \nRepair Log and" +
+		" workorder Log can be Generated."
+		);
+		
+		if(cur_frm.doc.docstatus && cur_frm.doc.status=="Scrap" ){
+			cur_frm.add_custom_button(__("Unscrap"),function(){
+				cur_frm.set_value("status","Open");
+			});
+		}
+		if(cur_frm.doc.docstatus){
+			frappe.call({
+				method:"erpnext.maintenance.doctype.maintenance_log.maintenance_log.view_name",	
+				args:{"name":cur_frm.doc.name},
+				callback:function(r){
+					//msgprint(r.message[2]);
+					if(r.message!= false){
+						cur_frm.add_custom_button(__(r.message[0]),function(){
+
+						frappe.set_route("Form", r.message[1], r.message[2]);
+						});
+					}
+				}
+			});
+			cur_frm.add_custom_button(__("Edit"),function(){
+				frm.amend_doc();
+			});
+			if(cur_frm.doc.status==="Open" && cur_frm.doc.status==="Open"){
+				cur_frm.add_custom_button(__('Repair Log'), function() {
+					frappe.call({
+							method:"erpnext.maintenance.doctype.maintenance_log.maintenance_log.view_name",
+							args:{"name":cur_frm.doc.name},
+							callback:function(r){
+								//alert(r.message);
+								if(r.message){
+									
+									frappe.throw(r.message[1]+" Already Created");
+									validated=false;
+								}
+								else{
+									frm.trigger("make_repair_log");
+								}
+							}
+					});
+				}, __("Make"));
+				cur_frm.add_custom_button(__('Workorder Log'), function() {
+					frappe.call({
+							method:"erpnext.maintenance.doctype.maintenance_log.maintenance_log.view_name",
+							args:{"name":cur_frm.doc.name},
+							callback:function(r){
+								if(r.message){
+									frappe.throw(r.message[1]+" Already Created");
+									validated=false;
+								}else{
+									frm.trigger("make_workorder_log");
+								}
+							}
+					});					
+				}, __("Make"));
+			}
+			if(cur_frm.doc.status!="Scrap" && cur_frm.doc.status!="Close"){
+			cur_frm.add_custom_button(__('Scrap'), function() {
+				cur_frm.set_value("status","Scrap");
+				cur_frm.update();
+			}, __("Make"));
+			cur_frm.add_custom_button(__('Close'), function() {
+				cur_frm.set_value("status","Close");
+			}, __("Make"));
+			cur_frm.page.set_inner_btn_group_as_primary(__("Make"));
+			}
+		}
+	},
+	make_repair_log:function(){
+		frappe.model.open_mapped_doc({
+			method: "erpnext.maintenance.doctype.maintenance_log.maintenance_log.make_repair_log",
+			frm: cur_frm
+		});
+	},
+	make_workorder_log:function(){
+		frappe.model.open_mapped_doc({
+			method: "erpnext.maintenance.doctype.maintenance_log.maintenance_log.make_workorder_log",
+			frm: cur_frm
+		});
+	},
+});
+cur_frm.cscript.onload = function(doc){
+	cur_frm.set_query("equipment_id",function(){
+			return{
+				"filters":{
+					"is_fixed_asset":"1"
+				}
+			};
+		});
+		
+}

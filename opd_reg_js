@@ -1,0 +1,383 @@
+// Copyright (c) 2016, Frappe Technologies Pvt. Ltd. and contributors
+// For license information, please see license.txt
+
+//location.reload(false);
+frappe.provide("erpnext.queries");
+frappe.ui.form.on('OPD Registration', {
+	onload:function(frm){
+		if (frm.doc.doctor_department){
+		cur_frm.set_query("doctor_id",function(){
+			return{
+				"filters":{
+				"department":frm.doc.doctor_department
+			}
+		};
+
+	});
+	}
+	},
+	refresh: function(frm) {
+		//Todays Date
+		if(!frm.doc.appointment_date){
+			frm.set_value("appointment_date",get_today());
+		//	frm.set_df_property("appointment_date", "read_only", frm.doc.__islocal ? 0:1);
+
+		}
+		//after_insert
+		if(!frm.doc.__islocal){
+			//check for consultation.
+			/*
+			frappe.call({
+				method:"erpnext.reception.doctype.opd_registration.opd_registration.btn_create_opd",
+				args: {appointment: frm.doc.name},
+				callback: function(data){
+					//alert(data.message[0]+" "+data.message[1]);
+					if(data.message[0]!= "False"){
+						frm.add_custom_button(__('View Consultation'), function() {
+							var doclist = frappe.model.sync(data.message);
+							frappe.set_route("Form",doclist[0] , doclist[1]);
+
+						});
+					}
+				}
+			});
+		*/
+			//Currently no need.
+		//	frm.add_custom_button(__('Mark Pending'),function(){
+		//		frm.set_value('status',"Pending");
+		//		frm.save();
+		//	});
+			frm.add_custom_button(__('Mark Close'),function(){
+				frm.set_value('status',"Closed");
+				frm.save();
+			});
+
+
+		} //After Save if stmt !local
+
+		//Auto-Redirect to Invoice
+		if(frm.doc.status == "Pending"){
+			frm.set_value("status","Open");
+			//frm.save();
+			btn_create_opd_invoice(frm);
+		}
+		//Auto-Create the consultation if Status is Paid
+		if(frm.doc.status == "Paid"){
+			//generate_token(frm);
+			//frm.save();
+			btn_create_consultation(frm);
+		}
+		//mark Field ReadOnly
+		//frm.set_df_property("token", "read_only", frm.doc.__islocal ? 0:1);
+		//frm.set_df_property("appointment_date", "read_only", frm.doc.__islocal ? 0:1);
+		frm.set_df_property("doctor_id", "read_only", frm.doc.__islocal ? 0:1);
+		frm.set_df_property("patient_id", "read_only", frm.doc.__islocal ? 0:1);
+		//frm.set_df_property("department", "read_only", frm.doc.__islocal ? 0:1);
+		frm.set_df_property("total_amount", "read_only", frm.doc.__islocal ? 0:1);
+		//frm.set_df_property("book", "hidden", frm.doc.__islocal ? 0:1);
+		frm.set_df_property("referring_doctor", "read_only", frm.doc.__islocal ? 0:1);
+	},
+	select_patient_type:function(frm){
+		if(frm.doc.select_patient_type=="Temporary Id")
+			frm.set_value("patient_id","")
+	},
+	validate:function(frm){
+		validate_iqama(frm);
+	},
+	iqama_no:function(frm){
+		if (isAlphabet(frm.doc.iqama_no)){
+			frm.set_value("iqama_no","")
+		}
+	},
+	opd_details:function(frm,cdt,cdn){
+		frappe.model.set_value(cdt,cdn,"flag","OPD");
+	},
+	discount:function(frm){
+		total_calculation(frm);
+	},
+	fees:function(frm){
+		total_calculation(frm);
+	},
+	doctor_id:function(frm,doctype,name){
+		/*--------------------Currently not in use----------------------------
+		var doc = frm.doc;
+		frm.set_value("doctor_availability","");
+		refresh_field("doctor_availability");
+		----------------------------------------------------------------------
+		doctor availability.
+		doctor holiday
+		patient waiting
+		----------------------------------------------------------------------
+		token
+		available slot
+		start_dt
+		end_dt
+		----------------------------------------------------------------------*/
+		if (frm.doc.doctor_id){
+			check_availability_for_doctor(frm);
+			if (frm.doc.doctor_id){
+			generate_token(frm);
+
+			frappe.model.with_doc("Doctor",frm.doc.doctor_id,function(){
+				var doctor = frappe.model.get_doc("Doctor",frm.doc.doctor_id);
+				frappe.model.set_value(frm.doc.doctype,frm.doc.name,"doctor_name",((frm.doc.doctor_id == "") ? '' : doctor.salutation+" "+doctor.full_name));
+				frappe.model.set_value(frm.doc.doctype,frm.doc.name,"doctor_department",((frm.doc.doctor_id == "") ? '' : doctor.department));
+				frappe.model.set_value(frm.doc.doctype,frm.doc.name,"room_no",((frm.doc.doctor_id == "") ? '' : doctor.room_number));
+			});
+		}
+	}
+	},
+	doctor_department:function(frm){
+
+	},
+//For Tab
+	vital_signs:function(frm,cdt,cdn){
+			frappe.model.set_value(cdt,cdn,"flag","VITAL SIGNS");
+			refresh_field("status");
+	},
+	insurance_details:function(frm,cdt,cdn){
+			frappe.model.set_value(cdt,cdn,"flag","Insurance Details");
+			refresh_field("status");
+	},
+	contact_details:function(frm,cdt,cdn){
+			frappe.model.set_value(cdt,cdn,"flag","Contact Details");
+			refresh_field("status");
+	},
+	attach_doc:function(frm,cdt,cdn){
+			frappe.model.set_value(cdt,cdn,"flag","ATTACH DOCUMENTS");
+			refresh_field("status");
+	},
+});
+
+var total_calculation = function(frm){
+	if(cur_frm.doc.fees && cur_frm.doc.discount>0){
+		total= cur_frm.doc.fees *(100- cur_frm.doc.discount)*0.01;
+		cur_frm.set_value('total_amount',total);
+	}else{
+		cur_frm.set_value('total_amount',cur_frm.doc.fees);
+	}
+}
+
+var validate_iqama = function(frm){
+	if(!cur_frm.doc.iqama_no && !cur_frm.doc.cash_type){
+		msgprint(__("Please Enter IQAMA Number."));
+		validated = false;
+		return;
+	}
+	if(cur_frm.doc.cash_type){
+		if(!cur_frm.doc.passport_no){
+			msgprint(__("Please Enter the Passport Number"));
+			validated = false;
+			return;
+		}
+	}
+}
+
+var isAlphabet = function(str){
+	return /^[a-zA-Z()]+$/.test(str);
+}
+
+	/*----------------This function is never called----------------
+				var btn_create_patient = function(frm){
+					if(patient_id)
+						var doc = frm.doc;
+						frappe.call({
+							method:"erpnext.reception.doctype.opd_registration.opd_registration.create_patient",
+							args: {opd_registration: doc.name},
+							callback: function(data){
+								if(!data.exc){
+								//	frm.set_value("status","Waiting");
+									frm.save();
+									location.reload();
+									//var doclist = frappe.model.sync(data.message);
+									//frappe.set_route("Form", doclist[0].doctype, doclist[0].name);
+								}
+						}
+					});
+				}
+		-------------------------------------------------------------*/
+
+var btn_after_save = function(frm){
+	if(patient_id)
+		var doc = frm.doc;
+		frappe.call({
+			method:"erpnext.reception.doctype.opd_registration.opd_registration.after_save",
+			args: {opd_registration: doc.name},
+			callback: function(data){
+				if(!data.exc){
+				//	frm.set_value("status","Waiting");
+					frm.save();
+					location.reload();
+					//var doclist = frappe.model.sync(data.message);
+					//frappe.set_route("Form", doclist[0].doctype, doclist[0].name);
+				}
+		}
+	});
+}
+
+frappe.ui.form.on('OPD Registration', {
+	salutation: function(frm) {
+		if(cur_frm.doc.salutation) {
+				cur_frm.set_value("gender", {
+					"Mr": "Male",
+					"Miss": "Female",
+					"Mrs": "Female"
+				}[cur_frm.doc.salutation]);
+			}
+		}
+	});
+
+//Date of Birth and age validation.
+frappe.ui.form.on('OPD Registration', {
+	dob: function(frm) {
+
+		if(cur_frm.doc.dob) {
+			var curr_year =parseInt(frappe.datetime.nowdate().toString().substring(0,4));
+			//----------------This should execute if dob exists--------------
+			var date_of_birth_year = parseInt(cur_frm.doc.dob.substring(0,4));
+			cur_frm.set_value("age",curr_year-date_of_birth_year);
+		}
+	}
+});
+
+var btn_create_opd_invoice= function(frm) {
+	var doc = frm.doc;
+	frappe.call({
+			method:"erpnext.reception.doctype.opd_registration.opd_registration.make_payment_opinvoice",
+			args:{appointment:doc.name},
+			callback:function(inv){
+			if(!inv.exc){
+				var doclist = frappe.model.sync(inv.message);
+				//frappe.set_route("Form", doclist[0].doctype, doclist[0].name);
+				window.location.replace("http://192.168.1.242:8000/desk#Form/"+doclist[0].doctype+"/"+doclist[0].name);
+			}
+		}
+	});
+}
+
+var btn_create_consultation = function(frm){
+	var doc = frm.doc;
+	frappe.call({
+		method:"erpnext.reception.doctype.opd_registration.opd_registration.create_consultation",
+		args: {appointment: doc.name},
+		callback: function(data){
+			if(!data.exc){
+				frm.set_value("status","Waiting");
+				frm.save();
+				location.reload();
+				//var doclist = frappe.model.sync(data.message);
+				//frappe.set_route("Form", doclist[0].doctype, doclist[0].name);
+			}
+		}
+	});
+}
+
+var check_availability_for_doctor = function(frm){
+	//update .doctor_availability.with Time and CurrTime
+	//Need Improvement
+	frappe.call({
+			method:"erpnext.reception.doctype.opd_registration.opd_registration.check_dr_avl",
+			args:{doctor_id:frm.doc.doctor_id,appointment_date:frm.doc.appointment_date},
+			callback:function(r){
+				if (r.message == "Doctor is not Available Today" || r.message == "Doctor is on Leave"){
+					frappe.msgprint(r.message);
+					frappe.model.set_value(frm.doc.doctype,frm.doc.name,"doctor_id","");
+				}
+
+				//alert(s.message.Start);
+				//set_avl = "<b>From : "+s.message.Start+" To : "+s.message.End+"</b><br>"+s.message.CurTime;
+				//frm.set_value("doctor_availability",set_avl);
+				// frm.set_value("status","Pending");
+				//frm.set_value("avl_time",s.message.nowTime);
+				//frm.set_value("avl_end_time",s.message.End_Time);
+				//refresh_field("doctor_availability");
+		}
+	});
+}
+
+var generate_token = function(frm){
+	var doc = frm.doc;
+	//alert("RUNAN")
+	if(doc.doctor_id && doc.appointment_date){
+		frappe.call({
+			method:"erpnext.reception.doctype.opd_registration.opd_registration.generate_token",
+			args:{doctor_id:doc.doctor_id,appointment_date:doc.appointment_date},
+			callback:function(data){
+				//alert(data.message.token);
+				//cur_frm.set_value("start_dt",data.message.start);
+				//cur_frm.set_value("end_dt",data.message.end);
+				cur_frm.set_value("token",data.message.token);
+				cur_frm.set_value("status","Pending");
+				refresh_field("token");
+			}
+		});}
+		else{
+			msgprint("Please Select Doctor");
+			return;
+		}
+}
+
+
+
+frappe.ui.form.on('OPD Registration',{
+
+			/*-----------------------------------------------------------
+
+						Calling patient field for existing patient
+
+			------------------------------------------------------------*/
+
+
+	patient_id:function(frm,doctype,name){
+		//Executig code only if patient_id is present not for new patient
+		if (frm.doc.patient_id){
+			//This the way to call get_doc function in javascript for other doctypes
+		frappe.model.with_doc("Patient",frm.doc.patient_id,function(){
+			var patient = frappe.model.get_doc("Patient", frm.doc.patient_id);
+
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"patient_name",patient.patient_name);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"first_name",patient.first_name);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"middle_name",patient.middle_name);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"last_name",patient.last_name);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"dob",patient.dob);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"age",patient.age);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"gender",patient.gender);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"civil_status",patient.civil_status);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"iqama_no",patient.iqama_no);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"passport_no",patient.passport_no);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"blood_group",patient.blood_group);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"mobile_no",patient.mobile_no);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"address",patient.address);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"country",patient.country);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"city",patient.city);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"religion",patient.religion);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"language_known",patient.language_known);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"iqama",patient.iqama);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"insurance_card",patient.insurance_card);
+
+		});
+	}
+	},
+
+	/*----------------------------------------------------------------------------------
+
+			Calling Temperary appointment details for Appointment scheduled in advanced
+
+	------------------------------------------------------------------------------------*/
+
+
+
+	temporary_id:function(frm,doctype,name){
+		frappe.model.with_doc("Appointment",frm.doc.temporary_id,function(){
+			var patient = frappe.model.get_doc("Appointment", frm.doc.temporary_id);
+
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"appointment_date",patient.appointment_date);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"patient_name",patient.patient_name);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"first_name",patient.first_name);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"last_name",patient.last_name);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"doctor_id",patient.doctor_id);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"doctor_name",patient.doctor_name);
+			frappe.model.set_value(frm.doc.doctype,frm.doc.name,"mobile_no",patient.mobile_no);
+		});
+	}
+});

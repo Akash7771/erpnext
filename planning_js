@@ -1,0 +1,80 @@
+// Copyright (c) 2016, Frappe Technologies Pvt. Ltd. and contributors
+// For license information, please see license.txt
+
+frappe.provide("erpnext.maintenance");
+
+erpnext.maintenance.Planning = frappe.ui.form.Controller.extend({
+	refresh: function(doc,cdt,cdn) {
+		if(doc.docstatus ){
+			cur_frm.add_custom_button(__("View Calendar"),function(){
+				frappe.set_route("Calendar", "Planning Calendar");
+			})
+		}
+	},
+	from_date:function(doc, cdt, cdn){
+		this.set_no_of_visits(doc, cdt, cdn);
+	},
+	to_date:function(doc,cdt,cdn){
+		this.set_no_of_visits(doc, cdt, cdn);
+	},
+	periodicity: function(doc, cdt, cdn) {
+		this.set_no_of_visits(doc, cdt, cdn);
+	},
+	set_no_of_visits:function(doc,cdt,cdn){
+
+		var plan = frappe.get_doc(cdt,cdn);
+		if(plan.from_date && plan.to_date && plan.periodicity){
+			if(plan.from_date > plan.to_date){
+				msgprint(__("Row No {0} :From Date must be before To Date", [plan.idx]));
+				return;
+			}
+
+		var date_diff = frappe.datetime.get_diff(plan.to_date, plan.from_date) + 1;
+
+		var days_in_period = {
+				"Weekly": 7,
+				"Monthly": 30,
+				"Quarterly": 91,
+				"Half Yearly": 182,
+				"Yearly": 365
+			}
+
+		var no_of_visits = cint(date_diff / days_in_period[plan.periodicity]);
+		frappe.model.set_value(plan.doctype, plan.name, "no_of_visit", no_of_visits);
+		}
+	},
+
+});
+
+$.extend(cur_frm.cscript, new erpnext.maintenance.Planning({frm: cur_frm}));
+
+cur_frm.cscript.onload = function(doc){
+	var item_list = []
+	frappe.call({
+		method:"erpnext.maintenance.doctype.planning.planning.equipment_query",	
+		callback:function(r){
+			for(var i = 0 ; i< r.message.length;i++){
+				item_list.push(r.message[i].item_code);
+			}
+		}
+	});
+	cur_frm.set_query("equipment_id", function() {
+		return {
+			filters: {
+				"item_code":['in',item_list],
+				"is_fixed_asset":"1"
+			}
+		};
+	});	
+}
+cur_frm.cscript.generate_schedule = function(doc, cdt, cdn) {
+	if (!doc.__islocal) {
+		return $c('runserverobj', args={'method':'generate_schedule', 'docs':doc},
+			function(r, rt) {
+				refresh_field('schedules');
+				window.location.reload();
+			});
+	} else {
+		msgprint(__("Please save the document before generating maintenance schedule"));
+	}
+}

@@ -1,0 +1,159 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and contributors
+# For license information, please see license.txt
+from __future__ import unicode_literals
+import time
+import frappe
+import calendar
+import datetime
+from time import gmtime, strftime
+from dateutil import parser
+from datetime import timedelta
+from frappe import _ , throw , msgprint
+from erpnext.medusense.scheduler import Document_working_days , check_availability_by_relation, check_availability_by_resource
+from frappe.utils import cint, flt, cstr, getdate, get_time
+from erpnext.setup.doctype.sms_settings.sms_settings import send_sms
+from frappe.model.document import Document
+
+class OPDRegistration(Document):
+	def autoname(self):
+		self.patient_name=" ".join(filter(None,[self.salutation,self.first_name,self.middle_name,self.last_name]))
+
+	def validate(self):
+		if self.iqama_no:
+			check_iqama_number_unique(self.iqama_no)
+
+		if self.passport_no:
+			check_passport_number_unique(self.passport_no)
+
+	def after_insert(self):
+		if not self.patient_id:
+			create_patient(self)
+		#confirm_sms(self)
+
+	def on_update(self):
+		self.full_name=" ".join(filter(None,[self.salutation,self.first_name,self.middle_name,self.last_name]))
+
+def check_iqama_number_unique(passport_no):
+	pass
+
+def check_passport_number_unique(passport_no):
+	pass
+
+
+def create_patient(self):
+	patient= frappe.new_doc("Patient")
+
+	patient.salutation = self.salutation
+	patient.first_name = self.first_name
+	patient.middle_name = self.middle_name
+	patient.last_name = self.last_name
+	patient.dob = self.dob
+	patient.age = self.age
+	patient.gender = self.gender
+	patient.civil_status = self.civil_status
+	patient.dob = self.dob
+	patient.language_known = self.language_known
+	patient.iqama_no = self.iqama_no
+	patient.cash_type = self.cash_type
+	patient.passport_no = self.passport_no
+	patient.mobile_no= self.mobile_no
+	patient.nationality = self.nationality
+	patient.language_known = self.language_known
+	#patient.blood_group = self.blood_group
+	patient.address= self.address
+	patient.iqama= self.iqama
+	patient.insurance_card= self.insurance_card
+	patient.save()
+	self.patient_id = patient.name
+
+@frappe.whitelist()
+def check_consultation(appointment):
+	appointment = frappe.get_doc("OPD Registration",appointment)
+	name = frappe.db.sql("""select name from `tabConsultation` where appointment='%s'"""%appointment.name,as_dict=1)
+	if name:
+		clt_i = ["Consultation",name[0].name]
+		return clt_i
+		return ["False"]
+
+@frappe.whitelist()
+def check_dr_avl(doctor_id,appointment_date=None):
+	#msgprint("Minaaz")
+	doctor = frappe.get_doc("Doctor",doctor_id)
+	is_doctor_available =False
+	if check_for_doctor_leave(doctor_id):
+		throw("Doctor is on Leave")
+		return
+	#date = datetime.date.today()
+	if not appointment_date:
+		throw("Please Set the Appointment Date:")
+		return
+	date = getdate(appointment_date)
+	hr = datetime.datetime.now().hour
+	mn = datetime.datetime.now().minute
+	day = calendar.day_name[date.weekday()]
+	ntime = str(hr)+":"+str(mn)
+	nowtime = datetime.datetime.now()
+	#msgprint("%s"%(nowtime))
+	avail ={}
+	for d in doctor.get("working_days"):
+		if day == d.day:
+			is_doctor_available = True
+			start = datetime.datetime.combine(date, get_time(d.start))
+			end = datetime.datetime.combine(date, get_time(d.end))
+			end_time = nowtime + datetime.timedelta(hours = 0, minutes=10, seconds=0)
+			avail = {"Start": d.start, "End": d.end,"CurTime":ntime,"nowTime":nowtime,"End_Time":end_time}
+
+			#msgprint("%s"%parser.parse(str(d.start))
+			g_Abtm("OP Registration",start ,end_time ,10, nowtime,doctor_id )
+
+	if not is_doctor_available:
+		throw("Doctor is not Available Today")
+	return avail
+
+def g_Abtm(doctype ,start , end, average, nowtime,doctor_id):
+	pass
+	#msgprint("%s %s %s %s"%(start , end , average ,nowtime))
+
+	#scheduled = frappe.db.sql("""select token, end_dt, doctor_id from `tab{0}`
+	#	where {1}='{2}' and start_dt between '{3}' and '{4}'
+	#	order by token desc""".format(doctype, "doctor_id", doctor_id, start, end),as_dict=1)
+	#if scheduled:
+	#	msgprint(scheduled)
+	#if start:
+		#msgprint("%s"%s)
+def get_hr():
+	pass
+
+def check_for_doctor_leave(doctor_id):
+	doctor = frappe.db.sql("""Select name from `tabDoctor Leave` where doctor_id='{0}'
+	and curdate() between leave_from and leave_to""".format(doctor_id))
+	if doctor:
+		return True
+	return False
+
+@frappe.whitelist()
+def generate_token(doctor_id,appointment_date):
+	tkn = frappe.db.sql("""select token from `tabOPD Registration`
+		where doctor_code='{0}' and appointment_date ='{1}' order by token desc""".format(doctor_id,appointment_date))
+
+	if len(tkn)>0:
+		inc_tkn = int(tkn[0][0]) +1
+	else:
+		inc_tkn = 1
+	data = {"token":inc_tkn}
+	return data
+
+@frappe.whitelist()
+def make_payment_opinvoice(appointment):
+	opd_registration = frappe.get_doc("OPD Registration",appointment)
+	invoices = frappe.new_doc("Invoices")
+	invoices.appointment_id = opd_registration
+	invoices.patient_id = opd_registration.patient_id
+	invoices.patient_id_fullname = opd_registration.patient_name
+	invoices.doctor_id=opd_registration.doctor_id
+	invoices.doctor_name = opd_registration.doctor_name
+	invoices.fees = opd_registration.fees
+	invoices.discount = opd_registration.discount
+	invoices.total = opd_registration.total_amount
+	return invoices.as_dict()

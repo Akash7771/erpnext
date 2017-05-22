@@ -1,0 +1,30 @@
+from erpnext.setup.doctype.sms_settings.sms_settings import send_sms
+
+def confirm_sms(doc):
+	if (frappe.db.get_value("", None, "app_con")=='1'):
+		messages = frappe.db.get_value("", None, "app_con_msg")
+		send_message(doc, messages)
+
+def send_message(doc, messages):
+	patient = frappe.get_doc("",doc.patient)
+	if(patient.mobile):
+		context = {"doc": doc, "alert": doc, "comments": None}
+		if doc.get("_comments"):
+			context["comments"] = json.loads(doc.get("_comments"))
+		#jinja to string convertion happens here
+		messages = frappe.render_template(messages, context)
+		number = [patient.mobile]
+		send_sms(number,messages)
+		
+onload:function(frm){
+		frappe.call({
+			method:"smarte.master.doctype.doctor.doctor.validate_day_begin",
+		
+			callback:function(data){
+				if(data.message=="Day End"){
+					msgprint("Day is not yet Started..");
+				
+				}
+			}
+		});
+	},

@@ -1,0 +1,52 @@
+JavaScript
+===============================================
+1) cur_frm.add_fetch('','','')
+
+2) frappe.cscript.fieldName= function(doc){}
+//cur_frm.cscript...
+
+3) frappe.cscript.validate = function(doc){}
+
+4) frappe.cscript.onload = function(doc){}
+
+5) frappe.call({
+	method:"",
+	args: {argument_name: arg_value,},
+	callback:function(r){r.message}
+	})
+
+6) cur_frm.set_value("field_name",value)
+
+7) get_today()
+
+8) cur_frm.set_df_property("field_name" , "read_only" ,1)
+
+9) cur_frm.set_df_property("generate_code","hidden",true);
+
+10) doc.save(ignore_permissions=True)
+
+11) frappe.ui.form.on("Doctype" ,{onload:function(frm){ frm.trigger("name")} , name:function(frm){}});
+
+12) frappe.ui.form.on("Sales Order", "<field_name>", function(frm) {}
+
+Client Side
+13) https://github.com/frappe/frappe/wiki/Client-Side-Scripting-Index
+
+14)taking value form custome (Link Field) -> ake value from Contact and set it to 
+contact_person
+cur_frm.fields_dict['contact_person'].get_query = function(doc, cdt, cdn) {
+	return {
+		filters:{ 'customer': doc.customer }
+	}
+}
+
+15) var child_var_name = frappe.get_doc("child_tablename")
+
+16)frm.set_df_property("time_zone", "options", [""].concat(frappe.all_timezones));
+
+
+
+
+
+
+

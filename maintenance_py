@@ -1,0 +1,83 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and contributors
+# For license information, please see license.txt
+
+from __future__ import unicode_literals
+import frappe
+from frappe.model.mapper import get_mapped_doc
+from frappe.model.document import Document
+
+class MaintenanceLog(Document):
+	pass
+
+@frappe.whitelist()
+def make_repair_log(source_name, target=None):
+	target = get_mapped_doc("Maintenance Log", source_name, {
+		"Maintenance Log": {
+			"doctype": "Repair Log",
+			"field_map": {
+				"problem_number": "equipment_id",
+			}
+		}
+	})
+	return target
+
+@frappe.whitelist()
+def make_workorder_log(source_name, target=None):
+	target = get_mapped_doc("Maintenance Log", source_name, {
+		"Maintenance Log": {
+			"doctype": "Workorder Log",
+			"field_map": {
+				"problem_number": "equipment_id",
+			}
+		}
+	})
+	return target
+
+@frappe.whitelist()
+def update_status(equipment_id, status):
+	flag = False
+	if equipment_id and status:
+		frappe.db.set_value("Maintenance Log",equipment_id,"status",status)
+		flag=True
+	return flag
+
+@frappe.whitelist()	
+def view_name(name):
+	repair_name = frappe.db.sql("""select name from `tabRepair Log` 
+	where problem_number ='%s'"""%(name),as_list=True)
+	if repair_name:
+		viewer=['View Repair Log','Repair Log',repair_name]
+		return viewer
+	else: 	
+		workorder_name = frappe.db.sql("""select name from `tabWorkorder Log` 
+		where problem_number ='%s'"""%(name),as_list=True)
+		if workorder_name:
+			viewer=["View Workorder Log","Workorder Log",workorder_name]
+			return viewer
+	return False
+
+@frappe.whitelist()	
+def view_workorder(name):
+	workorder_name = frappe.db.sql("""select name from `tabWorkorder Log` 
+	where problem_number ='%s'"""%(name),as_list=True)
+	if workorder_name:
+		viewer=['View Workorder Log','Workorder Log',workorder_name]
+		return viewer
+	return False
+	
+@frappe.whitelist()
+def check_repair_exist(name):
+	repair_name = frappe.db.sql("""select name from `tabRepair Log` 
+	where problem_number ='%s'"""%(name),as_list=True)
+	if repair_name:
+		return True
+	return False
+
+@frappe.whitelist()
+def check_workorder_exist(name):
+	workorder_name = frappe.db.sql("""select name from `tabWorkorder Log` 
+	where problem_number ='%s'"""%(name),as_list=True)
+	if workorder_name:
+		return True
+	return False

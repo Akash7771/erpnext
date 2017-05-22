@@ -1,0 +1,21 @@
+Python
+==================================
+
+1) frappe.db.sql(""" """)
+
+2) frappe.get_doc("field_name",value)
+
+3) @frappe.whitelist()
+
+4) def validate , def onload , on_submit , on_update ,..
+
+5)frappe.db.set_value("Maintenance Log","ML#00044","status","Under Repair")
+
+5.1) frappe.db.set(self, 'status', 'Submitted')
+
+API CALL(Without parameter)
+6)http://192.168.1.23:8000/api/method/erpnext.maintenance.doctype.maintenance_log.maintenance_log.make_repair_log
+
+7)self.append('child_table') {readOnly}
+
+8) frappe.get_doc({id:"",..}).insert(ignore_permissions=1)
